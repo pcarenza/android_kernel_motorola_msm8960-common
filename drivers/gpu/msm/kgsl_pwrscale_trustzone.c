@@ -149,55 +149,37 @@ static void tz_wake(struct kgsl_device *device, struct kgsl_pwrscale *pwrscale)
 #ifdef CONFIG_MSM_KGSL_SIMPLE_GOV
 /* KGSL Simple GPU Governor */
 /* Copyright (c) 2011-2013, Paul Reioux (Faux123). All rights reserved. */
-static int laziness = 5;
-module_param_named(simple_laziness, laziness, int, 0664);
-
-static int ramp_up_threshold = 6000;
-module_param_named(simple_ramp_threshold, ramp_up_threshold, int, 0664);
+static int lazyness = 5;
 
 static int simple_governor(struct kgsl_device *device, int idle_stat)
 {
+	int val = 0;
 	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
-	int i;
-	unsigned int total = 0;
-
-	history[counter] = idle_stat;
-
-	for (i = 0; i < HISTORY_SIZE; i++)
-		total += history[i];
-
-	total = total/HISTORY_SIZE;
-
-	if (++counter == 10)
-		counter = 0;
 
 	/* it's currently busy */
-	if (idle_stat < ramp_up_threshold) {
+	if (idle_stat < 6000) {
 		if (pwr->active_pwrlevel == 0)
 			val = 0; /* already maxed, so do nothing */
 		else if ((pwr->active_pwrlevel > 0) &&
 			(pwr->active_pwrlevel <= (pwr->num_pwrlevels - 1)))
-			/* bump up to next pwrlevel */
-			return -1; 
-	} 
+			val = -1; /* bump up to next pwrlevel */
 	/* idle case */
-	else 
-	{
+	} else {
 		if ((pwr->active_pwrlevel >= 0) &&
 			(pwr->active_pwrlevel < (pwr->num_pwrlevels - 1)))
-			if (laziness > 0) {
+			if (lazyness > 0) {
 				/* hold off for a while */
-				laziness--;
+				lazyness--;
 				val = 0; /* don't change anything yet */
 			} else {
 				val = 1; /* above min, lower it */
-				laziness = 5; /* reset laziness count */
+				lazyness = 5; /* reset lazyness count */
 			}
 		else if (pwr->active_pwrlevel == (pwr->num_pwrlevels - 1))
 			val = 0; /* already @ min, so do nothing */
 	}
 
-	return 0;
+	return val;
 }
 #endif
 
@@ -246,10 +228,7 @@ static void tz_idle(struct kgsl_device *device, struct kgsl_pwrscale *pwrscale,
 	priv->bin.busy_time = 0;
 	idle = (idle > 0) ? idle : 0;
 #ifdef CONFIG_MSM_KGSL_SIMPLE_GOV
-	if (priv->governor == TZ_GOVERNOR_SIMPLE)
-		val = simple_governor(device, idle);
-	else
-		val = __secure_tz_entry(TZ_UPDATE_ID, idle, device->id);
+	val = simple_governor(device, idle);
 #else
 	val = __secure_tz_entry(TZ_UPDATE_ID, idle, device->id);
 #endif
