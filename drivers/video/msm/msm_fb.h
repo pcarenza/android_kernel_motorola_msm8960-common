@@ -37,7 +37,9 @@
 #include <linux/fb.h>
 #include <linux/list.h>
 #include <linux/types.h>
+#include <linux/switch.h>
 #include <linux/msm_mdp.h>
+
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
 #endif
@@ -194,6 +196,7 @@ struct msm_fb_data_type {
 	struct list_head writeback_busy_queue;
 	struct list_head writeback_free_queue;
 	struct list_head writeback_register_queue;
+	struct switch_dev writeback_sdev;
 	wait_queue_head_t wait_q;
 	struct ion_client *iclient;
 	unsigned long display_iova;
@@ -212,9 +215,13 @@ struct msm_fb_data_type {
 	struct sw_sync_timeline *timeline;
 	int timeline_value;
 	struct mutex sync_mutex;
+	struct mutex queue_mutex;
 	struct completion commit_comp;
 	u32 is_committing;
-	struct work_struct commit_work;
+	atomic_t commit_cnt;
+	struct task_struct *commit_thread;
+	wait_queue_head_t commit_queue;
+	int wake_commit_thread;
 	void *msm_fb_backup;
 	boolean panel_driver_on;
 	int vsync_sysfs_created;
@@ -246,6 +253,8 @@ int calc_fb_offset(struct msm_fb_data_type *mfd, struct fb_info *fbi, int bpp);
 void msm_fb_wait_for_fence(struct msm_fb_data_type *mfd);
 int msm_fb_signal_timeline(struct msm_fb_data_type *mfd);
 void msm_fb_release_timeline(struct msm_fb_data_type *mfd);
+void msm_fb_release_busy(struct msm_fb_data_type *mfd);
+
 #ifdef CONFIG_FB_BACKLIGHT
 void msm_fb_config_backlight(struct msm_fb_data_type *mfd);
 #endif
